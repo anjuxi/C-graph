@@ -1,0 +1,4 @@
+*.o
+*.exe
+graph_demo
+test_graph

@@ -1,199 +1,169 @@
-# Graph Data Structure in C
+# C-graph
 
 [![C](https://img.shields.io/badge/C-11-blue.svg)](https://en.wikipedia.org/wiki/C11_(C_standard_revision))
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-A general-purpose graph library in C. It stores graphs as adjacency lists and supports directed and undirected graphs, along with common traversal and shortest-path algorithms.
+[中文文档](README_CN.md)
 
-## Data Structure
+## Introduction
 
-```
-┌─────────────────────────────────────────────────────────┐
-│                        Graph                            │
-├─────────────────────────────────────────────────────────┤
-│  vertices[]  │  vertexCount  │  capacity  │ isDirected │
-└──────┬──────────────────────────────────────────────────┘
-       │
-       ▼
-┌─────────────────────────────────────────────────────────┐
-│  Vertex[0]    Vertex[1]    Vertex[2]    ...             │
-│  ├─ data      ├─ data      ├─ data                      │
-│  └─ firstEdge └─ firstEdge └─ firstEdge                 │
-│       │            │            │                       │
-│       ▼            ▼            ▼                       │
-│   ┌──────┐     ┌──────┐     ┌──────┐                    │
-│   │Edge  │     │Edge  │     │Edge  │                    │
-│   ├─dest │     ├─dest │     ├─dest │                    │
-│   ├─weight    ├─weight    ├─weight                      │
-│   └─next─┘───►└─next─┘───►└─next─┘───► NULL            │
-└─────────────────────────────────────────────────────────┘
+This is an adjacency-list graph implementation in C11. It supports directed and undirected graphs with integer edge weights, plus DFS, BFS, Dijkstra shortest paths, and path reconstruction.
+
+The project started as a single `图.cpp` file with a fixed vertex capacity. It is now split into a header, an implementation file, a demo, and a test program. The vertex array grows automatically, vertex removal keeps edge indices consistent, and traversal reports vertices through a callback.
+
+The usual workflow:
+
+```mermaid
+flowchart LR
+    A[graphCreate] --> B[graphAddVertex]
+    B --> C[graphAddEdge]
+    C --> D[graphDFS / graphBFS]
+    C --> E[graphDijkstra]
+    E --> F[graphBuildPath]
+    D --> G[graphDestroy]
+    F --> G
 ```
 
-## API
+What it covers:
 
-### Create and destroy
+- Directed and undirected graphs, integer weights.
+- Automatic capacity growth by doubling.
+- Undirected edges stored in both directions; self-loops stored once.
+- Iterative DFS and array-based BFS.
+- Dijkstra with a helper that rebuilds the path from `prev`.
+
+## Dependencies
+
+[![C Standard](https://img.shields.io/badge/C-Standard%20Library-orange.svg)](https://en.wikipedia.org/wiki/C_standard_library)
+
+- C standard library: `stdio.h`, `stdlib.h`, `stdbool.h`, `stdint.h`, `limits.h`.
+- GCC or Clang with C11 support.
+- GNU Make is optional; plain gcc commands work as well.
+
+## Project structure
+
+```
+.
+├── graph.h            Types and public API
+├── graph.c            Implementation
+├── main.c             Demo program
+├── tests/
+│   └── test_graph.c   Assert-based tests
+├── Makefile           Build and test targets
+├── README.md          English documentation
+├── README_CN.md       Chinese documentation
+└── LICENSE
+```
+
+The vertex array is stored contiguously, and each vertex owns a linked list of outgoing edges:
+
+```
+Graph
+├── vertices[]
+│   ├── data
+│   └── firstEdge ──► EdgeNode(dest, weight, next) ──► ... ──► NULL
+├── vertexCount
+├── capacity
+└── isDirected
+```
+
+## Usage
+
+### Build and run
+
+```bash
+gcc -std=c11 -Wall -Wextra -Wpedantic -O2 -o graph_demo main.c graph.c
+./graph_demo
+```
+
+Or with make:
+
+```bash
+make
+./graph_demo
+```
+
+On Windows the binary is `graph_demo.exe`, so run `.\graph_demo.exe`.
+
+### Test
+
+```bash
+gcc -std=c11 -Wall -Wextra -Wpedantic -I. -o test_graph tests/test_graph.c graph.c
+./test_graph
+```
+
+Or simply `make test`. The tests cover capacity growth, adding and removing edges, self-loops, index changes after vertex removal, traversal order, and shortest paths.
+
+### API
 
 | Function | Description |
-| ----------------------------------- | ---------------- |
-| `graphCreate(capacity, isDirected)` | Create a graph |
-| `graphDestroy(g)` | Destroy the graph and free memory |
-
-### Vertex operations
-
-| Function | Description |
-| ------------------------------ | -------------------- |
-| `graphAddVertex(g, data)` | Add a vertex |
-| `graphRemoveVertex(g, index)` | Remove a vertex |
-| `graphGetVertexIndex(g, data)` | Find a vertex index by data |
-| `graphGetVertexData(g, index)` | Get vertex data |
-| `graphVertexCount(g)` | Get the vertex count |
-
-### Edge operations
-
-| Function | Description |
-| ----------------------------------- | -------------- |
-| `graphAddEdge(g, from, to, weight)` | Add an edge |
-| `graphRemoveEdge(g, from, to)` | Remove an edge |
+| --- | --- |
+| `graphCreate(capacity, isDirected)` | Create a graph; `capacity` is only the initial size |
+| `graphDestroy(g)` | Free the vertex array and all edge nodes |
+| `graphReserve(g, capacity)` | Ensure room for at least `capacity` vertices |
+| `graphAddVertex(g, data)` | Add a vertex, returns its index or `-1` |
+| `graphRemoveVertex(g, index)` | Remove a vertex; later indices shift down |
+| `graphGetVertexIndex(g, data)` | Find a vertex by data, `-1` if absent |
+| `graphGetVertexData(g, index)` | Vertex data, `INT_MIN` for a bad index |
+| `graphVertexCount(g)` | Number of vertices |
+| `graphAddEdge(g, from, to, weight)` | Add an edge; undirected graphs get the reverse edge |
+| `graphRemoveEdge(g, from, to)` | Remove an edge and its reverse edge |
 | `graphHasEdge(g, from, to)` | Check whether an edge exists |
-| `graphGetEdgeWeight(g, from, to)` | Get edge weight |
+| `graphGetEdgeWeight(g, from, to)` | Edge weight, `INT_MAX` if absent |
+| `graphDFS(g, start, visit, userData)` | Depth-first traversal |
+| `graphBFS(g, start, visit, userData)` | Breadth-first traversal |
+| `graphDijkstra(g, start, dist, prev)` | Shortest paths with non-negative weights |
+| `graphBuildPath(prev, vertexCount, end, path, capacity)` | Rebuild a path from `prev` |
+| `graphInDegree(g, index)` | In-degree; equals the degree in undirected graphs |
+| `graphOutDegree(g, index)` | Out-degree; equals the degree in undirected graphs |
+| `graphPrint(g)` | Print the adjacency lists |
 
-### Traversal
+`GraphVisitFn` is `void (*)(int index, int data, void* userData)`. The `userData` pointer is passed back unchanged on every call.
 
-| Function | Description |
-| ------------------------- | ------------ |
-| `graphDFS(g, startIndex)` | Depth-first search |
-| `graphBFS(g, startIndex)` | Breadth-first search |
-
-### Algorithms
-
-| Function | Description |
-| ------------------------------------------ | -------------------- |
-| `graphDijkstra(g, startIndex, dist, prev)` | Dijkstra shortest paths |
-| `graphInDegree(g, index)` | Compute in-degree |
-| `graphOutDegree(g, index)` | Compute out-degree |
-
-## Example
+### Example
 
 ```c
+#include "graph.h"
 #include <stdio.h>
 
-int main() {
-    // Create a directed weighted graph
+static void printVertex(int index, int data, void* userData) {
+    (void)index;
+    (void)userData;
+    printf("%d ", data);
+}
+
+int main(void) {
     Graph* g = graphCreate(10, true);
 
-    // Add vertices
-    graphAddVertex(g, 0);
-    graphAddVertex(g, 1);
-    graphAddVertex(g, 2);
+    for (int i = 0; i < 3; i++) {
+        graphAddVertex(g, i);
+    }
+    graphAddEdge(g, 0, 1, 10);
+    graphAddEdge(g, 0, 2, 5);
+    graphAddEdge(g, 1, 2, 2);
 
-    // Add weighted edges
-    graphAddEdge(g, 0, 1, 10);  // 0 -> 1, weight 10
-    graphAddEdge(g, 0, 2, 5);   // 0 -> 2, weight 5
-    graphAddEdge(g, 1, 2, 2);   // 1 -> 2, weight 2
+    graphDFS(g, 0, printVertex, NULL);
+    printf("\n");
 
-    // Traversal
-    graphDFS(g, 0);
-    graphBFS(g, 0);
-
-    // Dijkstra
-    int dist[3], prev[3];
+    int dist[3];
+    int prev[3];
     graphDijkstra(g, 0, dist, prev);
+    printf("dist to 2 = %d\n", dist[2]);
 
-    // Print the graph
-    graphPrint(g);
-
-    // Destroy the graph
     graphDestroy(g);
-
     return 0;
 }
 ```
 
-## Algorithm Flow
-
-### DFS
-
-```mermaid
-graph TD
-    A[Start DFS] --> B[Initialize visited array]
-    B --> C[Visit start vertex]
-    C --> D[Recursively visit adjacent vertices]
-    D --> E{Adjacent vertex visited?}
-    E -->|No| C
-    E -->|Yes| F[Return]
-```
-
-### BFS
-
-```mermaid
-graph TD
-    A[Start BFS] --> B[Initialize queue and visited array]
-    B --> C[Enqueue start vertex]
-    C --> D{Queue empty?}
-    D -->|No| E[Dequeue and visit vertex]
-    E --> F[Enqueue unvisited adjacent vertices]
-    F --> D
-    D -->|Yes| G[Done]
-```
-
-### Dijkstra
-
-```mermaid
-graph TD
-    A[Start] --> B[Initialize distance array]
-    B --> C[Set start distance to 0]
-    C --> D{All vertices visited?}
-    D -->|No| E[Pick unvisited vertex u with the smallest distance]
-    E --> F[Mark u as visited]
-    F --> G[Relax edges from u]
-    G --> D
-    D -->|Yes| H[Done]
-```
-
-## Build and Run
-
-```bash
-# Build
-gcc -o graph graph.c -std=c11
-
-# Run
-./graph
-```
-
-Use your actual source filename if it differs from `graph.c`.
-
-## Sample Output
+### Sample output
 
 ```
-C:\Users\anjuxi\Desktop\graph>a.exe
-=== Graph Test ===
-
 [Undirected graph]
-
 Graph (undirected, 5 vertices):
 Vertex[0](data=0): -> [2](weight=1) -> [1](weight=1)
-Vertex[1](data=1): -> [3](weight=1) -> [0](weight=1)
-Vertex[2](data=2): -> [3](weight=1) -> [0](weight=1)
-Vertex[3](data=3): -> [4](weight=1) -> [2](weight=1) -> [1](weight=1)
-Vertex[4](data=4): -> [3](weight=1)
-
+...
 DFS: 0 2 3 4 1
 BFS: 0 2 1 3 4
-Degree of vertex 0: 2
-Undirected graph destroyed
-
-[Directed weighted graph]
-
-Graph (directed, 5 vertices):
-Vertex[0](data=0): -> [2](weight=5) -> [1](weight=10)
-Vertex[1](data=1): -> [3](weight=1) -> [2](weight=2)
-Vertex[2](data=2): -> [4](weight=2) -> [3](weight=9) -> [1](weight=3)
-Vertex[3](data=3): -> [4](weight=4)
-Vertex[4](data=4): -> [3](weight=6)
-
-DFS: 0 2 4 3 1
-BFS: 0 2 1 4 3
-Vertex 1 in-degree: 2, out-degree: 2
 
 Shortest paths from vertex 0:
 To vertex[0]: distance=0, path=0
@@ -201,47 +171,21 @@ To vertex[1]: distance=8, path=0 2 1
 To vertex[2]: distance=5, path=0 2
 To vertex[3]: distance=9, path=0 2 1 3
 To vertex[4]: distance=7, path=0 2 4
-
-After removing edge 0->1:
-
-Graph (directed, 5 vertices):
-Vertex[0](data=0): -> [2](weight=5)
-Vertex[1](data=1): -> [3](weight=1) -> [2](weight=2)
-Vertex[2](data=2): -> [4](weight=2) -> [3](weight=9) -> [1](weight=3)
-Vertex[3](data=3): -> [4](weight=4)
-Vertex[4](data=4): -> [3](weight=6)
-
-Directed graph destroyed
 ```
 
-## Dependencies
+Run `./graph_demo` for the full output.
 
-[![C Standard](https://img.shields.io/badge/C-Standard%20Library-orange.svg)](https://en.wikipedia.org/wiki/C_standard_library)
+## Contributing
 
-- Standard C library: `<stdio.h>`, `<stdlib.h>`, `<stdbool.h>`, `<limits.h>`
-- Compiler: GCC or Clang with C11 support
+Bug reports and pull requests are welcome. Keep the code C11-compatible, add a test when behavior changes, and run `make test` before submitting.
 
-## Time Complexity
+## Contact
 
-| Operation | Time complexity |
-| ------------ | ---------- |
-| Add vertex | O(1) |
-| Remove vertex | O(V + E) |
-| Add edge | O(1) |
-| Remove edge | O(E) |
-| DFS | O(V + E) |
-| BFS | O(V + E) |
-| Dijkstra | O(V²) |
+**Ailan Anjuxi**
 
-> V = number of vertices, E = number of edges
+- 📫 Email: [anjuxi.ME@outlook.com](mailto:anjuxi.ME@outlook.com)
+- 📞 SIP: [sip:anjuxi@sip.linphone.org](sip:anjuxi@sip.linphone.org)
 
-## Author
+## License
 
-**Ailan Anjuxi (谙弆悕博士)**
-
-- Email: [anjuxi.ME@outlook.com](mailto:anjuxi.ME@outlook.com)
-- SIP: [sip:anjuxi@sip.linphone.org](sip:anjuxi@sip.linphone.org)
-
----
-
-*This project is for learning and teaching. It demonstrates a basic graph implementation and common graph algorithms.*
+MIT. See [LICENSE](LICENSE).
